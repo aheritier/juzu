@@ -16,9 +16,14 @@
 
 package juzu.impl.runtime;
 
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+
+import javax.annotation.processing.Processor;
 import juzu.impl.common.DevClassLoader;
 import juzu.impl.common.Logger;
-import juzu.impl.compiler.*;
+import juzu.impl.compiler.CompilationException;
 import juzu.impl.compiler.Compiler;
 import juzu.impl.fs.FileSystemScanner;
 import juzu.impl.fs.Filter;
@@ -27,10 +32,6 @@ import juzu.impl.fs.spi.ReadFileSystem;
 import juzu.impl.fs.spi.ram.RAMFileSystem;
 import juzu.impl.fs.spi.url.URLFileSystem;
 import juzu.processor.MainProcessor;
-
-import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
 
 /**
  * The module life cycle.
@@ -138,6 +139,9 @@ public abstract class ModuleRuntime<C> {
         //
         ReadFileSystem<S> sourcePath = scanner.getFileSystem();
 
+        // We need to enforce to have tools.jar in the CP
+        classPath.add(new URL("file://"+System.getProperty("java.home")+"/../lib/tools.jar"));
+
         // Copy everything that is not a java source
         RAMFileSystem classOutput = new RAMFileSystem();
         sourcePath.copy(new Filter.Default() {
@@ -155,6 +159,11 @@ public abstract class ModuleRuntime<C> {
             classOutput(classOutput).
             addClassPath(classPath).build();
         compiler.addAnnotationProcessor(new MainProcessor());
+        try {
+          compiler.addAnnotationProcessor((Processor) Class.forName("lombok.javac.apt.Processor").getConstructor().newInstance());
+        } catch (Exception e) {
+          logger.log("Cannot add Lombok annotation processor");
+        }
         compiler.compile();
 
         //
